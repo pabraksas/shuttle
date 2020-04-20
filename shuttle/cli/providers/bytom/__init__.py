@@ -5,8 +5,11 @@
 from shuttle.cli import click
 
 from .htlc import htlc
-from .signature import sign
+from .fund import fund
+from .claim import claim
+from .refund import refund
 from .decode import decode
+from .signature import sign
 from .submit import submit
 
 
@@ -16,11 +19,11 @@ def bytom():
     pass
 
 
-# Adding bitcoin htlc
+# Adding bytom commands
 bytom.add_command(htlc)
-# Adding bytom sign
-bytom.add_command(sign)
-# Adding bytom decoder
+bytom.add_command(fund)
+bytom.add_command(claim)
+bytom.add_command(refund)
 bytom.add_command(decode)
-# Adding bytom submit
+bytom.add_command(sign)
 bytom.add_command(submit)
