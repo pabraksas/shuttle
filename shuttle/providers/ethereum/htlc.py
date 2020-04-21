@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import json
-import os
 
 from web3 import Web3
 from web3.providers import HTTPProvider
@@ -9,6 +8,7 @@ from solcx import compile_standard
 from eth_typing import URI
 
 from ..config import ethereum
+from .wallet import Wallet
 
 # Ethereum configuration
 ethereum = ethereum()
@@ -226,7 +226,6 @@ contract HTLC {
 }
 """
 
-
 # Solidity source code
 compiled_sol = compile_standard({
     "language": "Solidity",
@@ -252,44 +251,60 @@ compiled_sol = compile_standard({
 class HTLC:
 
     # Initialization
-    def __init__(self, network="testnet"):
+    def __init__(self, network="testnet", ganache=False):
+        # Ethereum network.
+        self.network, self.ganache = network, ganache
+
+        self.web3, self.htlc, self.contract_address = \
+            None, None, ethereum[self.network]["ganache" if self.ganache else "infura"]["contract_address"]
+
+        # get bytecode
+        self._bytecode = compiled_sol["contracts"]["HTLC.sol"]["HTLC"]["evm"]["bytecode"]["object"]
+        # get abi
+        self._abi = json.loads(compiled_sol["contracts"]["HTLC.sol"]["HTLC"]["metadata"])["output"]["abi"]
+        # get abi
+        self._opcode = compiled_sol["contracts"]["HTLC.sol"]["HTLC"]["evm"]["bytecode"]["opcodes"]
+
+    # New HTLC deploy
+    def new(self, wallet=None):
+
         # Bytom network.
-        self.network = network
         self.web3 = Web3(
             HTTPProvider(
-                URI(ethereum["timeout"]["url"]), request_kwargs={
+                URI(ethereum[self.network]["ganache" if self.ganache else "infura"]["url"]),
+                request_kwargs={
                     "timeout": ethereum["timeout"]
                 }
             )
         )
 
-        # set pre-funded account as sender
-        # self.web3.eth.defaultAccount = self.web3.eth.accounts[0]
-        # web3.eth.account.privateKeyToAccount(self.hdwallet['private_key'])
-
-        # get bytecode
-        self._bytecode = compiled_sol["contracts"]["HTLC.sol"]["HTLC"]["evm"]["bytecode"]["object"]
-
-        # get abi
-        self._abi = json.loads(compiled_sol["contracts"]["HTLC.sol"]["HTLC"]["metadata"])["output"]["abi"]
+        if wallet:
+            self.web3.eth.account.privateKeyToAccount(wallet.private_key())
+        else:
+            self.web3.eth.defaultAccount = self.web3.eth.accounts[0]
 
         new_htlc = self.web3.eth.contract(abi=self._abi, bytecode=self._bytecode)
         # Submit the transaction that deploys the contract
         tx_hash = new_htlc.constructor().transact()
         # Wait for the transaction to be mined, and get the transaction receipt
         tx_receipt = self.web3.eth.waitForTransactionReceipt(tx_hash)
+        # Setting new contract address
+        self.contract_address = tx_receipt.contractAddress
+        return self
+
+    def init(self):
 
         self.htlc = self.web3.eth.contract(
-            address=tx_receipt.contractAddress,
+            address=self.contract_address,
             abi=self._abi
         )
+        return self
 
     def bytecode(self):
         return self._bytecode
 
-    @staticmethod
-    def opcode():
-        return compiled_sol["contracts"]["HTLC.sol"]["HTLC"]["evm"]["bytecode"]["opcodes"]
+    def opcode(self):
+        return self._opcode
 
     def abi(self):
         return self._abi
