@@ -47,7 +47,7 @@ class Wallet:
         # Ethereum wallet initialization.
         self.ethereum = ETHWallet()
         self.ethereum.from_entropy(entropy=entropy, passphrase=passphrase, language=language)
-        self.ethereum.from_path(path=self._path)
+        self.derivation()
         self.dumps = self.ethereum.dumps()
         return self
 
@@ -73,7 +73,7 @@ class Wallet:
         # Ethereum wallet initialization.
         self.ethereum = ETHWallet()
         self.ethereum.from_mnemonic(mnemonic=mnemonic, passphrase=passphrase, language=language)
-        self.ethereum.from_path(path=self._path)
+        self.derivation()
         self.dumps = self.ethereum.dumps()
         return self
 
@@ -95,7 +95,7 @@ class Wallet:
         # Ethereum wallet initialization.
         self.ethereum = ETHWallet()
         self.ethereum.from_seed(seed=seed)
-        self.ethereum.from_path(path=self._path)
+        self.derivation()
         self.dumps = self.ethereum.dumps()
         return self
 
@@ -121,9 +121,8 @@ class Wallet:
         return self
 
     # Path derivation
-    def from_path(self, path):
-        self.ethereum.from_path(path=path)
-        self.dumps = self.ethereum.dumps()
+    def derivation(self):
+        self.ethereum.from_path(path=self._path)
         return self
 
     # Getting private key
