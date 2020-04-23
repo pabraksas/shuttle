@@ -59,19 +59,23 @@ def ethereum():
         "mainnet": {
             "infura": {
                 "url": "http://localhost:9888",
-                "contract_address": ""
+                "contract_address": {
+                    "eth": "",
+                    "erc20": ""
+                }
             }
         },
         "testnet": {
             "infura": {
                 "url": "http://localhost:9888",
-                "contract_address": ""
-            },
-            "ganache": {
-                "url": "http://localhost:8545",
-                "contract_address": ""
+                "contract_address": {
+                    "eth": "",
+                    "erc20": ""
+                }
             }
         },
+        "wait_for_transaction_receipt_timeout": 120,
+        "gas": 3000000,
         "timeout": 60,
         "time": 1  # hour
     }
