@@ -1,20 +1,22 @@
 #!/usr/bin/env python3
 
-import json
-
 from web3 import Web3
 from web3.providers import HTTPProvider
 from solcx import compile_standard
+from binascii import unhexlify, hexlify
 from eth_typing import URI
+
+import json
 
 from ..config import ethereum
 from .wallet import Wallet
+from ...utils.exceptions import AddressError
 
 # Ethereum configuration
 ethereum = ethereum()
 
 HTLC_SCRIPT = """
-pragma solidity ^0.5.17;
+pragma solidity >=0.5.0 <0.6.0;
 
 
 contract HTLC {
@@ -251,13 +253,40 @@ compiled_sol = compile_standard({
 class HTLC:
 
     # Initialization
-    def __init__(self, network="testnet", ganache=False):
-        # Ethereum network.
-        self.network, self.ganache = network, ganache
+    def __init__(self, web3=None, network="testnet"):
 
-        self.web3, self.htlc, self.contract_address = \
-            None, None, ethereum[self.network]["ganache" if self.ganache else "infura"]["contract_address"]
+        # Ethereum network setup.
+        if web3 and not isinstance(web3, Web3):
+            raise ValueError("invalid web3 instance, only takes Wallet class")
+        elif web3 is not None:
+            self.web3 = web3
+            self._hash = None
+            self._contract_address = None
+        elif network not in ["mainnet", "testnet"]:
+            raise ValueError("invalid network type, please choose only mainnet or testnet.")
+        elif network == "mainnet":
+            self._hash = ethereum["mainnet"]["infura"]["hash"]["eth"]
+            self._contract_address = ethereum["mainnet"]["infura"]["contract_address"]["eth"]
+            self.web3 = Web3(HTTPProvider(
+                    URI(ethereum["mainnet"]["infura"]["url"]),
+                    request_kwargs={
+                        "timeout": ethereum["timeout"]
+                    }
+                )
+            )
+        elif network == "testnet":
+            self._hash = ethereum["mainnet"]["infura"]["hash"]["eth"]
+            self._contract_address = ethereum["testnet"]["infura"]["contract_address"]["eth"]
+            self.web3 = Web3(HTTPProvider(
+                    URI(ethereum["testnet"]["infura"]["url"]),
+                    request_kwargs={
+                        "timeout": ethereum["timeout"]
+                    }
+                )
+            )
 
+        # HTLC info's
+        self.contract_init = None
         # get bytecode
         self._bytecode = compiled_sol["contracts"]["HTLC.sol"]["HTLC"]["evm"]["bytecode"]["object"]
         # get abi
@@ -265,38 +294,70 @@ class HTLC:
         # get abi
         self._opcode = compiled_sol["contracts"]["HTLC.sol"]["HTLC"]["evm"]["bytecode"]["opcodes"]
 
-    # New HTLC deploy
-    def new(self, wallet=None):
+    # Build transaction for HTLC
+    def build_transaction(self, wallet=None, amount=0):
 
-        # Bytom network.
-        self.web3 = Web3(
-            HTTPProvider(
-                URI(ethereum[self.network]["ganache" if self.ganache else "infura"]["url"]),
-                request_kwargs={
-                    "timeout": ethereum["timeout"]
-                }
-            )
-        )
-
+        # Checking waller instance
+        if wallet and not isinstance(wallet, Wallet):
+            raise ValueError("invalid wallet instance, only takes Wallet class")
+        if not isinstance(amount, int):
+            raise TypeError("invalid amount instance, only takes integer type")
+        # Setting wallet
         if wallet:
-            self.web3.eth.account.privateKeyToAccount(wallet.private_key())
+            account = self.web3.eth.account.privateKeyToAccount(wallet.private_key())
+            new_htlc = self.web3.eth.contract(abi=self._abi, bytecode=self._bytecode)
+            # Submit the transaction that deploys the contract
+            construct_txn = new_htlc.constructor().buildTransaction({
+                "from": account.address,
+                "value": amount,
+                "nonce": self.web3.eth.getTransactionCount(account.address),
+                "gas": ethereum["gas"],
+                "gasPrice": self.web3.eth.gasPrice
+            })
+            signed = account.signTransaction(construct_txn)
+            self._hash = self.web3.eth.sendRawTransaction(signed.rawTransaction)
         else:
             self.web3.eth.defaultAccount = self.web3.eth.accounts[0]
+            new_htlc = self.web3.eth.contract(abi=self._abi, bytecode=self._bytecode)
+            # Submit the transaction that deploys the contract
+            self._hash = new_htlc.constructor().transact()
 
-        new_htlc = self.web3.eth.contract(abi=self._abi, bytecode=self._bytecode)
-        # Submit the transaction that deploys the contract
-        tx_hash = new_htlc.constructor().transact()
         # Wait for the transaction to be mined, and get the transaction receipt
-        tx_receipt = self.web3.eth.waitForTransactionReceipt(tx_hash)
+        tx_receipt = self.web3.eth.waitForTransactionReceipt(self._hash,
+                                                             timeout=ethereum["wait_for_transaction_receipt_timeout"])
         # Setting new contract address
-        self.contract_address = tx_receipt.contractAddress
+        self._contract_address = tx_receipt.contractAddress
         return self
 
-    def init(self):
+    def hash(self):
+        return hexlify(self._hash).decode()
 
-        self.htlc = self.web3.eth.contract(
-            address=self.contract_address,
-            abi=self._abi
+    def contract_address(self):
+        return self._contract_address
+
+    def init(self, secret_hash, recipient_address, sender_address, end_time):
+
+        # Checking parameters
+        if not isinstance(secret_hash, str):
+            raise TypeError("secret hash must be string format")
+        if len(secret_hash) != 64:
+            raise ValueError("invalid secret hash, length must be 64.")
+        if not isinstance(recipient_address, str):
+            raise TypeError("recipient address must be string format")
+        if not Web3.isAddress(recipient_address):
+            raise AddressError("invalid ethereum recipient %s address" % recipient_address)
+        if not isinstance(sender_address, str):
+            raise TypeError("sender address must be string format")
+        if not Web3.isAddress(sender_address):
+            raise AddressError("invalid ethereum sender %s address" % sender_address)
+        if not isinstance(end_time, int):
+            raise TypeError("end_time must be integer format")
+
+        self.contract_init = (
+            Web3.toChecksumAddress(recipient_address),
+            unhexlify(secret_hash),
+            int(end_time),
+            Web3.toChecksumAddress(sender_address)
         )
         return self
 
