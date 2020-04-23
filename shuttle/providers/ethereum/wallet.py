@@ -16,10 +16,11 @@ class Wallet:
     """
 
     # PyShuttle Ethereum (BTM) wallet init.
-    def __init__(self, path="m/44'/60'/0'/0/0"):
+    def __init__(self, account_index=0, path=None):
 
         # Derivation path
-        self._path = path
+        self._path = path if path \
+            else ("m/44'/60'/0'/0/%d" % account_index)
         # Ethereum wallet initialization.
         self.ethereum = None
         # Wallet info's
@@ -236,6 +237,22 @@ class Wallet:
         """
 
         return self.dumps["seed"]
+
+    # Getting finger print
+    def finger_print(self):
+        """
+        Get ethereum wallet finger print.
+
+        :return: str -- ethereum finger print of private key.
+
+        >>> from shuttle.providers.ethereum.wallet import Wallet
+        >>> wallet = Wallet()
+        >>> wallet.from_mnemonic("occasione pizzico coltivato cremoso odorare epilogo patacca salone fonia sfuso vispo selettivo")
+        >>> wallet.finger_print()
+        "bc7c2a20"
+        """
+
+        return self.dumps["finger_print"]
 
     # Getting path
     def path(self):
