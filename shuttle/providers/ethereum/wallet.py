@@ -2,7 +2,7 @@
 
 from eth_wallet import Wallet as ETHWallet
 
-# from .rpc import get_balance, account_create
+from .rpc import get_balance
 
 
 # Ethereum Wallet.
@@ -10,13 +10,20 @@ class Wallet:
     """
     Ethereum Wallet class.
 
+    :param network: ethereum network, defaults to ropsten.
+    :type network: str
+    :param path: ethereum account index, defaults to 0 -> "m/44'/60'/0'/0/{account_index}".
+    :type path: str
     :param path: ethereum derivation path, defaults to "m/44'/60'/0'/0/0".
     :type path: str
     :returns:  Wallet -- ethereum wallet instance.
     """
 
     # PyShuttle Ethereum (BTM) wallet init.
-    def __init__(self, account_index=0, path=None):
+    def __init__(self, network="ropsten", account_index=0, path=None):
+
+        # Setting network
+        self.network = network
 
         # Derivation path
         self._path = path if path \
@@ -121,6 +128,25 @@ class Wallet:
         self.dumps = self.ethereum.dumps()
         return self
 
+    def from_address(self, address):
+        """
+        Initiate ethereum wallet from address.
+
+        :param address: Ethereum wallet private key.
+        :type address: str.
+        :returns:  Wallet -- ethereum wallet instance.
+
+        >>> from shuttle.providers.ethereum.wallet import Wallet
+        >>> wallet = Wallet()
+        >>> wallet.from_address("0x89f64dFE79777217BD16a278EE675DaE9c089729")
+        <shuttle.providers.ethereum.wallet.Wallet object at 0x040DA268>
+        """
+
+        self.dumps = {"private_key": None, "public_key": None, "uncompressed": None,
+                      "entropy": None, "mnemonic": None, "language": None, "seed": None,
+                      "address": address, "finger_print": None, "path": None}
+        return self
+
     # Path derivation
     def derivation(self):
         self.ethereum.from_path(path=self._path)
@@ -140,7 +166,7 @@ class Wallet:
         "6fc58f27cec4b943e8a1f53bf7d54ecb0a22bd01c21e7d383870e99531b2ba24"
         """
 
-        return self.dumps["private_key"]
+        return self.dumps["private_key"] if "private_key" in self.dumps else None
 
     # Getting public key
     def public_key(self):
@@ -156,7 +182,7 @@ class Wallet:
         "024de8f3421dc1138c1d1ccd9bfe22d727d7639475eb852c54cc8b3fddd9c5e9e6"
         """
 
-        return self.dumps["public_key"]
+        return self.dumps["public_key"] if "public_key" in self.dumps else None
 
     # Getting uncompressed public key
     def uncompressed(self):
@@ -172,7 +198,7 @@ class Wallet:
         "4de8f3421dc1138c1d1ccd9bfe22d727d7639475eb852c54cc8b3fddd9c5e9e66c153cd99d81f9db5985e5ba0ba4ca49d51086c8c89a7fdbc568c394fcfdfb3e"
         """
 
-        return self.dumps["uncompressed"]
+        return self.dumps["uncompressed"] if "uncompressed" in self.dumps else None
 
     # Getting entropy
     def entropy(self):
@@ -188,7 +214,7 @@ class Wallet:
         "8d7454bb99e8e68de6adfc5519cbee64"
         """
 
-        return self.dumps["entropy"]
+        return self.dumps["entropy"] if "entropy" in self.dumps else None
 
     # Getting mnemonic
     def mnemonic(self):
@@ -204,7 +230,7 @@ class Wallet:
         "occasione pizzico coltivato cremoso odorare epilogo patacca salone fonia sfuso vispo selettivo"
         """
 
-        return self.dumps["mnemonic"]
+        return self.dumps["mnemonic"] if "mnemonic" in self.dumps else None
 
     # Getting language
     def language(self):
@@ -220,7 +246,7 @@ class Wallet:
         "italian"
         """
 
-        return self.dumps["language"]
+        return self.dumps["language"] if "language" in self.dumps else None
 
     # Getting seed
     def seed(self):
@@ -236,7 +262,7 @@ class Wallet:
         "a0f734f68f800f1f43719473fbdcdb64b83a3d180add1d6f819ccbf5abbcb852c791d7e8249a62e1bbda60322de7ce0d0f3d5649e368431d058bbe6879ad2cd6"
         """
 
-        return self.dumps["seed"]
+        return self.dumps["seed"] if "seed" in self.dumps else None
 
     # Getting finger print
     def finger_print(self):
@@ -252,7 +278,7 @@ class Wallet:
         "bc7c2a20"
         """
 
-        return self.dumps["finger_print"]
+        return self.dumps["finger_print"] if "finger_print" in self.dumps else None
 
     # Getting path
     def path(self):
@@ -268,7 +294,7 @@ class Wallet:
         "m/44'/60'/0'/0/0"
         """
 
-        return self.dumps["path"]
+        return self.dumps["path"] if "path" in self.dumps else None
 
     # Getting address
     def address(self):
@@ -284,20 +310,20 @@ class Wallet:
         "0x89f64dFE79777217BD16a278EE675DaE9c089729"
         """
 
-        return self.dumps["address"]
+        return self.dumps["address"] if "address" in self.dumps else None
 
-    # # Getting balance
-    # def balance(self):
-    #     """
-    #     Get ethereum wallet balance.
-    #
-    #     :return: int -- ethereum balance.
-    #
-    #     >>> from shuttle.providers.ethereum.wallet import Wallet
-    #     >>> wallet = Wallet(network="mainnet")
-    #     >>> wallet.from_mnemonic("occasione pizzico coltivato cremoso odorare epilogo patacca salone fonia sfuso vispo selettivo")
-    #     >>> wallet.balance()
-    #     2450000000
-    #     """
-    #
-    #     return get_balance(address=self.address(), network=self.network)
+    # Getting balance
+    def balance(self):
+        """
+        Get ethereum wallet balance.
+
+        :return: int -- ethereum balance.
+
+        >>> from shuttle.providers.ethereum.wallet import Wallet
+        >>> wallet = Wallet(network="mainnet")
+        >>> wallet.from_mnemonic("occasione pizzico coltivato cremoso odorare epilogo patacca salone fonia sfuso vispo selettivo")
+        >>> wallet.balance()
+        3000000
+        """
+
+        return get_balance(address=self.address(), network=self.network)
