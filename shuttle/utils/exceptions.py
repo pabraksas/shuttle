@@ -45,6 +45,15 @@ class NotFoundError(Exception):
         return "%s" % self.error_message
 
 
+class BuildTransactionError(Exception):
+
+    def __init__(self, error_message):
+        self.error_message = error_message
+
+    def __str__(self):
+        return "%s" % self.error_message
+
+
 class AddressError(Exception):
 
     def __init__(self, error_message, error_detail=None):
