@@ -1,35 +1,28 @@
 #!/usr/bin/env python3
 
-from web3 import Web3, HTTPProvider
-from eth_typing import URI
 from datetime import datetime
 
-import os
+import json
 
 from shuttle.providers.ethereum.wallet import Wallet
 from shuttle.providers.ethereum.htlc import HTLC
 from shuttle.providers.ethereum.transaction import FundTransaction
+from shuttle.providers.ethereum.solver import FundSolver
+from shuttle.providers.ethereum.signature import FundSignature
+from shuttle.utils import sha256
 
 
-web3 = Web3(
-    HTTPProvider(
-        URI(
-            os.environ.get(
-                "GANACHE_CLI_HTTP_PROVIDER_URI",
-                "http://localhost:8545"
-            )
-        ), request_kwargs={
-            "timeout": 60
-        }
-    )
-)
-
+# Setting Ganache CLI
+NETWORK = "GANACHE".lower()
 
 print("=" * 10, "Sender Ethereum Account")
 
-sender_mnemonic = "divorce trap battle prosper either evoke wreck mammal chase envelope kingdom valley"
-# Initialize ethereum sender wallet form mnemonic
-sender_wallet = Wallet(account_index=2).from_mnemonic(mnemonic=sender_mnemonic)
+# acquire law parade avocado pipe army welcome observe mixed lazy awesome brass
+SENDER_MNEMONIC = "bamboo notice youth glove ocean whale bullet sniff stuff tube baby horse"
+# Initialize ethereum wallet.
+sender_wallet = Wallet(network=NETWORK)
+# Getting sender wallet form mnemonic.
+sender_wallet.from_mnemonic(mnemonic=SENDER_MNEMONIC)
 # Getting sender ethereum wallet information's
 sender_entropy = sender_wallet.entropy()
 print("Sender Entropy:", sender_entropy)
@@ -49,19 +42,34 @@ sender_path = sender_wallet.path()
 print("Sender Path:", sender_path)
 sender_address = sender_wallet.address()
 print("Sender Address:", sender_address)
+sender_balance = sender_wallet.balance()
+print("Sender Balance:", sender_balance)
 
-print("=" * 10, "Building new transaction Hash Time Lock Contract (HTLC) and Initializing HTLC.")
+print("=" * 10, "Recipient Ethereum Account")
+
+RECIPIENT_ADDRESS = "0x31AA61a5D8756c84eBdF0F34e01caB90514f2a57"
+# Initialize ethereum wallet.
+recipient_wallet = Wallet(network=NETWORK)
+# Getting sender wallet form mnemonic.
+recipient_wallet.from_address(RECIPIENT_ADDRESS)
+# Recipient wallet information's
+recipient_address = recipient_wallet.address()
+print("Recipient Address:", recipient_address)
+recipient_balance = recipient_wallet.balance()
+print("Recipient Balance:", recipient_balance)
+
+print("=" * 10, "Building new transaction & Initializing Hash Time Lock Contract (HTLC).")
 
 # Building new HTLC transaction.
-htlc = HTLC(web3=web3).build_transaction(
+htlc = HTLC(network=NETWORK).build_transaction(
     wallet=sender_wallet,
     amount=0
 )
 # Initializing HTLC.
 htlc.init(
-    secret_hash="3a26da82ead15a80533a02696656b14b5dbfd84eb14790f2e1be5e9e45820eeb",
-    recipient_address="0x983f9F6A150CD8A788D5Fa9Cc572500491cEE50b",
-    sender_address="0x31AA61a5D8756c84eBdF0F34e01caB90514f2a57",
+    secret_hash=sha256("Hello Meheret!".encode()).hex(),
+    recipient_address=recipient_address,
+    sender_address=sender_address,
     end_time=int(datetime.timestamp(datetime.now())) + 3600
 )
 
@@ -77,15 +85,54 @@ print("HTLC OP_Code:", htlc_opcode)
 htlc_abi = htlc.abi()
 print("HTLC ABI:", htlc_abi)
 
+print("=" * 10, "Unsigned Fund Transaction")
 
-fund_transaction = FundTransaction(web3=web3).build_transaction(
+# Initializing fund transaction.
+unsigned_fund_transaction = FundTransaction(network=NETWORK)
+# Building transaction
+unsigned_fund_transaction.build_transaction(
     wallet=sender_wallet,
     htlc=htlc,
     amount=100
 )
 
-print(fund_transaction.construct_txn)
-signed = fund_transaction.sign(sender_wallet.private_key())
-print(signed)
-print(fund_transaction.submit(signed))
+print("Unsigned Fund Transaction Fee:", unsigned_fund_transaction.fee)
+print("Unsigned Fund Transaction Hash:", unsigned_fund_transaction.hash())
+print("Unsigned Fund Transaction Raw:", unsigned_fund_transaction.raw())
+print("Unsigned Fund Transaction Json:", unsigned_fund_transaction.json())
+print("Unsigned Fund Transaction Signature:", unsigned_fund_transaction.signature)
 
+unsigned_fund_raw = unsigned_fund_transaction.unsigned_raw()
+print("Unsigned Fund Transaction Unsigned Raw:", unsigned_fund_raw)
+
+print("=" * 10, "Signed Fund Transaction")
+
+# Initialize solver
+fund_solver = FundSolver(
+    private_key=sender_private_key
+)
+
+# Singing Hash Time Lock Contract (HTLC)
+signed_fund_transaction = unsigned_fund_transaction.sign(fund_solver)
+
+print("Signed Fund Transaction Fee:", signed_fund_transaction.fee)
+print("Signed Fund Transaction Hash:", signed_fund_transaction.hash())
+print("Signed Fund Transaction Raw:", signed_fund_transaction.raw())
+print("Signed Fund Transaction Signature:", signed_fund_transaction.signature)
+print("Signed Fund Transaction Json:", signed_fund_transaction.json())
+
+print("=" * 10, "Fund Signature")
+
+# Singing Hash Time Lock Contract (HTLC)
+fund_signature = FundSignature(network=NETWORK)\
+    .sign(unsigned_raw=unsigned_fund_raw, solver=fund_solver)
+
+print("Fund Signature Fee:", fund_signature.fee)
+print("Fund Signature Hash:", fund_signature.hash())
+print("Fund Signature Raw:", fund_signature.raw())
+print("Fund Signature Transaction Signature:", fund_signature.signature)
+print("Fund Signature Json:", signed_fund_transaction.json())
+# print("Fund Signature Json:", json.dumps(fund_signature.json(), indent=4))
+
+signed_fund_raw = fund_signature.signed_raw()
+print("Fund Signature Signed Raw:", signed_fund_raw)

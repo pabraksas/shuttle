@@ -54,27 +54,49 @@ def bytom():
 
 
 # Ethereum network
-def ethereum():
+def ethereum(project_id=None):
+    if project_id is None:
+        project_id = "4414fea5f7454211956b1627621450b4"
     return {
         "mainnet": {
-            "infura": {
-                "url": "http://localhost:9888",
-                "contract_address": {
-                    "eth": "",
-                    "erc20": ""
-                }
+            "url": "https://mainnet.infura.io/v3/%s" % project_id,
+            "hash": {
+                "eth": "",
+                "erc20": "",
+                "erc721": ""
+            },
+            "contract_address": {
+                "eth": "",
+                "erc20": "",
+                "erc721": ""
             }
         },
-        "testnet": {
-            "infura": {
-                "url": "http://localhost:9888",
-                "contract_address": {
-                    "eth": "",
-                    "erc20": ""
-                }
+        "ropsten": {
+            "url": "https://ropsten.infura.io/v3/%s" % project_id,
+            "hash": {
+                "eth": "",
+                "erc20": "",
+                "erc721": ""
+            },
+            "contract_address": {
+                "eth": "",
+                "erc20": "",
+                "erc721": ""
             }
         },
-        "wait_for_transaction_receipt_timeout": 120,
+        "ganache": {
+            "url": "http://localhost:8545",
+            "hash": {
+                "eth": "",
+                "erc20": "",
+                "erc721": ""
+            },
+            "contract_address": {
+                "eth": "",
+                "erc20": "",
+                "erc721": ""
+            }
+        },
         "gas": 3000000,
         "timeout": 60,
         "time": 1  # hour

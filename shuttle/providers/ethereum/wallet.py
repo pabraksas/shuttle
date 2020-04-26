@@ -3,6 +3,7 @@
 from eth_wallet import Wallet as ETHWallet
 
 from .rpc import get_balance
+from .utils import to_checksum_address
 
 
 # Ethereum Wallet.
@@ -310,7 +311,7 @@ class Wallet:
         "0x89f64dFE79777217BD16a278EE675DaE9c089729"
         """
 
-        return self.dumps["address"] if "address" in self.dumps else None
+        return to_checksum_address(self.dumps["address"]) if "address" in self.dumps else None
 
     # Getting balance
     def balance(self):

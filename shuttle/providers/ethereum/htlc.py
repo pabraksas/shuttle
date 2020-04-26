@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 
-from web3 import Web3
-from web3.providers import HTTPProvider
-from solcx import compile_standard
 from binascii import unhexlify, hexlify
-from eth_typing import URI
+from solcx import compile_standard
 
 import json
 
 from ..config import ethereum
 from .wallet import Wallet
-from ...utils.exceptions import AddressError
+from .rpc import get_web3
+from .utils import is_address, to_checksum_address
+from ...utils.exceptions import AddressError, BalanceError, BuildTransactionError
 
 # Ethereum configuration
 ethereum = ethereum()
+
 
 HTLC_SCRIPT = """
 pragma solidity >=0.5.0 <0.6.0;
@@ -253,40 +253,12 @@ compiled_sol = compile_standard({
 class HTLC:
 
     # Initialization
-    def __init__(self, web3=None, network="testnet"):
-
-        # Ethereum network setup.
-        if web3 and not isinstance(web3, Web3):
-            raise ValueError("invalid web3 instance, only takes Wallet class")
-        elif web3 is not None:
-            self.web3 = web3
-            self._hash = None
-            self._contract_address = None
-        elif network not in ["mainnet", "testnet"]:
-            raise ValueError("invalid network type, please choose only mainnet or testnet.")
-        elif network == "mainnet":
-            self._hash = ethereum["mainnet"]["infura"]["hash"]["eth"]
-            self._contract_address = ethereum["mainnet"]["infura"]["contract_address"]["eth"]
-            self.web3 = Web3(HTTPProvider(
-                    URI(ethereum["mainnet"]["infura"]["url"]),
-                    request_kwargs={
-                        "timeout": ethereum["timeout"]
-                    }
-                )
-            )
-        elif network == "testnet":
-            self._hash = ethereum["mainnet"]["infura"]["hash"]["eth"]
-            self._contract_address = ethereum["testnet"]["infura"]["contract_address"]["eth"]
-            self.web3 = Web3(HTTPProvider(
-                    URI(ethereum["testnet"]["infura"]["url"]),
-                    request_kwargs={
-                        "timeout": ethereum["timeout"]
-                    }
-                )
-            )
+    def __init__(self, network="ropsten"):
 
         # HTLC info's
         self.contract_init = None
+        # Initializing web3 and getting previous hash & contract address of htlc
+        self._hash, _, self.web3 = get_web3(network=network)
         # get bytecode
         self._bytecode = compiled_sol["contracts"]["HTLC.sol"]["HTLC"]["evm"]["bytecode"]["object"]
         # get abi
@@ -315,25 +287,27 @@ class HTLC:
                 "gasPrice": self.web3.eth.gasPrice
             })
             signed = account.signTransaction(construct_txn)
-            self._hash = self.web3.eth.sendRawTransaction(signed.rawTransaction)
+            try:
+                self._hash = self.web3.eth.sendRawTransaction(signed.rawTransaction)
+            except ValueError as value_error:
+                if str(value_error).find("sender doesn't have enough funds to send tx") != -1:
+                    raise BalanceError("insufficient spend balance")
+                raise value_error
         else:
             self.web3.eth.defaultAccount = self.web3.eth.accounts[0]
             new_htlc = self.web3.eth.contract(abi=self._abi, bytecode=self._bytecode)
             # Submit the transaction that deploys the contract
             self._hash = new_htlc.constructor().transact()
-
-        # Wait for the transaction to be mined, and get the transaction receipt
-        tx_receipt = self.web3.eth.waitForTransactionReceipt(self._hash,
-                                                             timeout=ethereum["wait_for_transaction_receipt_timeout"])
-        # Setting new contract address
-        self._contract_address = tx_receipt.contractAddress
         return self
 
     def hash(self):
         return hexlify(self._hash).decode()
 
     def contract_address(self):
-        return self._contract_address
+        tx_receipt = self.web3.eth.getTransactionReceipt(transaction_hash=self._hash)
+        if tx_receipt is None:
+            raise BuildTransactionError("HTLC %s still not mined, wait for it to be mined..." % self.hash())
+        return to_checksum_address(tx_receipt.contractAddress)
 
     def init(self, secret_hash, recipient_address, sender_address, end_time):
 
@@ -344,20 +318,20 @@ class HTLC:
             raise ValueError("invalid secret hash, length must be 64.")
         if not isinstance(recipient_address, str):
             raise TypeError("recipient address must be string format")
-        if not Web3.isAddress(recipient_address):
+        if not is_address(recipient_address):
             raise AddressError("invalid ethereum recipient %s address" % recipient_address)
         if not isinstance(sender_address, str):
             raise TypeError("sender address must be string format")
-        if not Web3.isAddress(sender_address):
+        if not is_address(sender_address):
             raise AddressError("invalid ethereum sender %s address" % sender_address)
         if not isinstance(end_time, int):
             raise TypeError("end_time must be integer format")
 
         self.contract_init = (
-            Web3.toChecksumAddress(recipient_address),
+            to_checksum_address(recipient_address),
             unhexlify(secret_hash),
             int(end_time),
-            Web3.toChecksumAddress(sender_address)
+            to_checksum_address(sender_address)
         )
         return self
 
