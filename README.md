@@ -44,5 +44,4 @@ tests against a specific version of Python.
 Feel free to open an issue if you find a problem, or a pull request if you've solved an issue.
 
 ## License
-
 Distributed under the [AGPL-3.0](https://github.com/meherett/shuttle/blob/ethereum/LICENSE) license. See ``LICENSE`` for more information.
