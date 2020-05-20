@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+from datetime import datetime
+
 
 # Bitcoin network
 def bitcoin(blockcypher_token=None):
@@ -99,5 +101,5 @@ def ethereum(project_id=None):
         },
         "gas": 3000000,
         "timeout": 60,
-        "time": 1  # hour
+        "time": int(datetime.timestamp(datetime.now())) + (3600 * 1)  # 1 hour
     }
