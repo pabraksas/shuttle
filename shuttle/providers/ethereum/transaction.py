@@ -10,7 +10,7 @@ from .wallet import Wallet
 from .htlc import HTLC
 from .rpc import get_web3
 from .utils import is_address, to_checksum_address
-from .solver import FundSolver
+from .solver import FundSolver, ClaimSolver, RefundSolver
 from ...utils.exceptions import BuildTransactionError
 
 
@@ -107,7 +107,7 @@ class FundTransaction(Transaction):
     """
 
     # Initialization fund transaction
-    def __init__(self, network="ganache"):
+    def __init__(self, network="ropsten"):
         # Setting network
         super().__init__(network=network)
         # Initializing web3 and getting previous hash & contract address of htlc
@@ -198,3 +198,145 @@ class FundTransaction(Transaction):
             network=self.network,
             type="ethereum_fund_unsigned"
         ))).encode()).decode()
+
+
+class ClaimTransaction(Transaction):
+    """
+    Bytom ClaimTransaction class.
+
+    :param network: ethereum network, defaults to ropsten.
+    :type network: str
+    :returns: ClaimTransaction -- ethereum claim transaction instance.
+
+    .. warning::
+        Do not forget to build transaction after initialize claim transaction.
+
+    :fee: Get ethereum claim transaction fee.
+
+    >>> claim_transaction.fee
+    10000000
+
+    :signatures: Get ethereum fund transaction signature data.
+
+    >>> claim_transaction.signature
+    {...}
+    """
+
+    # Initialization fund transaction
+    def __init__(self, network="ropsten"):
+        # Setting network
+        super().__init__(network=network)
+        # Secret key
+        self.secret = None
+        # Initializing web3 and getting previous hash & contract address of htlc
+        self._hash, self._contract_address, self.web3 = get_web3(network=network)
+
+    def build_transaction(self, transaction_id, wallet, amount, secret=None):
+        """
+        Build ethereum claim transaction.
+
+        :param wallet: ethereum recipient wallet.
+        :type wallet: ethereum.wallet.Wallet
+        :param amount: ethereum amount to withdraw.
+        :type amount: int
+        :param transaction_id: ethereum fund transaction id to redeem, default to None.
+        :type transaction_id: str
+        :param secret: secret key.
+        :type secret: str
+        :returns: ClaimTransaction -- ethereum claim transaction instance.
+
+        >>> from shuttle.providers.ethereum.transaction import ClaimTransaction
+        >>> claim_transaction = ClaimTransaction(network="ropsten")
+        >>> claim_transaction.build_transaction(fund_transaction_id, recipient_wallet, 10000)
+        <shuttle.providers.ethereum.transaction.ClaimTransaction object at 0x0409DAF0>
+        """
+
+        # Checking build transaction arguments instance
+        if transaction_id and not isinstance(transaction_id, str):
+            raise TypeError("invalid transaction id instance, only takes ethereum string type")
+        if not isinstance(wallet, Wallet):
+            raise TypeError("invalid wallet instance, only takes ethereum Wallet class")
+        if not isinstance(amount, int):
+            raise TypeError("invalid asset instance, only takes integer type")
+        if secret is not None and not isinstance(secret, str):
+            raise TypeError("invalid secret instance, only takes string type")
+
+        # Getting transaction receipt
+        transaction_receipt = self.web3.eth.getTransactionReceipt(transaction_id)
+        if transaction_receipt is None:
+            raise ValueError("You can't claim now, wait for it to be mined....")
+
+        # Getting HTLC instances
+        htlc = HTLC(network=self.network)
+        htlc_contract = self.web3.eth.contract(
+            address=self._contract_address,
+            abi=htlc.abi()
+        )
+
+        # Getting log htlc new event.
+        log_htlc_new = htlc_contract.events.LogHTLCNew()\
+            .processLog(transaction_receipt.logs[0])
+        # Getting contract id from transaction hash/id
+        contract_id = hexlify(log_htlc_new.args.contractId).decode()
+
+        # Building new HTLC transaction
+        self.transaction = htlc_contract.functions.withdraw(
+            contract_id, secret
+        ).buildTransaction({
+            "from": to_checksum_address(wallet.address()),
+            "nonce": self.web3.eth.getTransactionCount(to_checksum_address(wallet.address())),
+            "value": int(amount)
+        })
+        self.fee = int(self.transaction["gas"])
+        self.secret = secret
+        return self
+
+    # Signing transaction using private keys
+    def sign(self, solver):
+        """
+        Sign ethereum claim transaction.
+
+        :param solver: ethereum claim solver.
+        :type solver: ethereum.solver.ClaimSolver
+        :returns: ClaimTransaction -- ethereum claim transaction instance.
+
+        >>> from shuttle.providers.ethereum.transaction import ClaimTransaction
+        >>> claim_transaction = ClaimTransaction(network="ropsten")
+        >>> claim_transaction.build_transaction(fund_transaction_id, recipient_wallet, 10000)
+        >>> claim_transaction.sign(claim_solver)
+        <shuttle.providers.ethereum.transaction.ClaimTransaction object at 0x0409DAF0>
+        """
+
+        if not isinstance(solver, ClaimSolver):
+            raise TypeError("solver must be ClaimSolver format.")
+        wallet = solver.solve()
+        return self
+
+    def unsigned_raw(self):
+        """
+        Get ethereum unsigned claim transaction raw.
+
+        :returns: str -- ethereum unsigned claim transaction raw.
+
+        >>> from shuttle.providers.ethereum.transaction import ClaimTransaction
+        >>> claim_transaction = ClaimTransaction(network="ropsten")
+        >>> claim_transaction.build_transaction(fund_transaction_id, recipient_wallet, 10000)
+        >>> claim_transaction.unsigned_raw()
+        "eyJmZWUiOiA2NzgsICJyYXciOiAiMDIwMDAwMDAwMTJjMzkyMjE3NDgzOTA2ZjkwMmU3M2M0YmMxMzI4NjRkZTU4MTUzNzcyZDc5MjY4OTYwOTk4MTYyMjY2NjM0YmUwMTAwMDAwMDAwZmZmZmZmZmYwMmU4MDMwMDAwMDAwMDAwMDAxN2E5MTQ5NzE4OTRjNThkODU5ODFjMTZjMjA1OWQ0MjJiY2RlMGIxNTZkMDQ0ODdhNjI5MDAwMDAwMDAwMDAwMTk3NmE5MTQ2YmNlNjVlNThhNTBiOTc5ODk5MzBlOWE0ZmYxYWMxYTc3NTE1ZWYxODhhYzAwMDAwMDAwIiwgIm91dHB1dHMiOiBbeyJhbW91bnQiOiAxMjM0MCwgIm4iOiAxLCAic2NyaXB0IjogIjc2YTkxNDZiY2U2NWU1OGE1MGI5Nzk4OTkzMGU5YTRmZjFhYzFhNzc1MTVlZjE4OGFjIn1dLCAidHlwZSI6ICJiaXRjb2luX2Z1bmRfdW5zaWduZWQifQ"
+        """
+
+        if not self.transaction:
+            raise ValueError("transaction script is none, build transaction first")
+
+        return b64encode(str(json.dumps(dict(
+            fee=self.fee,
+            guid=self.guid,
+            unsigned=self.unsigned(detail=False),
+            hash=self.transaction["tx"]["hash"],
+            raw=self.transaction["raw_transaction"],
+            secret=self.secret,
+            network=self.network,
+            signatures=list(),
+            type="ethereum_claim_unsigned"
+        ))).encode()).decode()
+
